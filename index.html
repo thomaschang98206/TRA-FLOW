@@ -7,27 +7,21 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
     integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
   <style>
-    /* Fixed 320x480 canvas */
     html, body { height: 100%; margin: 0; background:#fff; }
-    .frame { width: 320px; height: 480px; margin: 0 auto; background:#fff; overflow: hidden; }
-    .app { display: grid; grid-template-rows: 34px 286px 160px; width: 320px; height: 480px; }
-    header { padding: 4px 8px; border-bottom: 1px solid #eee; display:flex; align-items:center; justify-content:space-between; gap:6px; }
-    header h1 { font-size: 12px; margin: 0; font-weight: 700; color: #222; letter-spacing: .5px; }
-    .ctl { display:flex; align-items:center; gap:6px; }
+    .frame { width: 320px; height: 480px; margin: 0 auto; background:#fff; overflow: hidden; position: relative; }
+    /* Layout: very small header, rest is map, overlays float on top */
+    header { position: absolute; top:0; left:0; right:0; height: 32px; display:flex; align-items:center; justify-content:space-between; padding: 4px 6px; gap:6px; z-index: 1000; background: rgba(255,255,255,0.85); backdrop-filter: blur(2px); border-bottom: 1px solid #eee; }
+    header h1 { font-size: 11px; margin: 0; font-weight: 700; color: #222; letter-spacing: .2px; }
+    .ctl { display:flex; align-items:center; gap:4px; }
     .btn { border: 1px solid #ddd; background: #fff; padding: 2px 6px; border-radius: 6px; font-size: 11px; }
-    #map { width: 320px; height: 286px; }
-    .panel { width: 320px; height: 160px; border-top:1px solid #eee; display:grid; grid-template-rows: 50px 1fr; }
-    .controls { padding: 6px 8px; display:grid; grid-template-columns: 1fr auto; gap:6px; align-items:center; }
-    .slider-row { display:flex; align-items:center; gap:6px; grid-column:1/-1; }
-    .slider-row span { font-size: 11px; color:#333; }
+    #map { width: 320px; height: 480px; }
+    /* Bottom overlay: month slider */
+    .bottom-controls { position: absolute; left:0; right:0; bottom: 6px; padding: 4px 6px; z-index: 1000; }
+    .slider { display:flex; align-items:center; gap:6px; background: rgba(255,255,255,0.85); border:1px solid #eee; border-radius: 10px; padding: 4px 6px; }
+    .slider span { font-size: 11px; color:#333; }
     input[type="range"] { width: 100%; }
     .month-label { width: 58px; text-align:right; font-variant-numeric: tabular-nums; font-size: 11px; }
-    .ranking { padding: 2px 8px 6px; overflow:auto; }
-    .ranking h3 { margin: 4px 0; font-size: 11px; color:#333; }
-    ol.ranking-list { margin: 0; padding-left: 16px; }
-    ol.ranking-list li { margin: 2px 0; display:flex; justify-content: space-between; gap: 6px; font-size: 11px; }
-    .value { font-variant-numeric: tabular-nums; }
-    /* station labels – smaller */
+    /* Station labels */
     .leaflet-tooltip.station-label {
       background: transparent;
       border: none;
@@ -38,35 +32,50 @@
       text-shadow: 0 0 2px #fff, 0 0 4px #fff;
       padding: 0 2px;
     }
+    /* Bottom sheet for ranking */
+    .sheet { position: absolute; left:0; right:0; bottom:0; height: 62%; max-height: 300px; background:#fff; border-top: 1px solid #e5e7eb; border-radius: 12px 12px 0 0; box-shadow: 0 -6px 16px rgba(0,0,0,0.08); transform: translateY(100%); transition: transform .25s ease; z-index: 1500; display: grid; grid-template-rows: 30px 1fr; }
+    .sheet.open { transform: translateY(0); }
+    .sheet .handle { display:flex; align-items:center; justify-content:center; gap:8px; border-bottom: 1px solid #eee; }
+    .sheet .handle .bar { width: 28px; height: 4px; border-radius: 2px; background:#ccc; }
+    .sheet .handle .title { font-size: 12px; color:#333; font-weight: 700; }
+    .ranking { overflow:auto; padding: 6px 10px; }
+    ol.ranking-list { margin: 0; padding-left: 16px; }
+    ol.ranking-list li { margin: 3px 0; display:flex; justify-content: space-between; gap: 6px; font-size: 12px; }
+    .value { font-variant-numeric: tabular-nums; }
   </style>
 </head>
 <body>
 <div class="frame">
-  <div class="app">
-    <header>
-      <h1>高雄台鐵 14站</h1>
-      <div class="ctl">
-        <button id="playBtn" class="btn">播放</button>
-        <select id="speedSel" class="btn">
-          <option value="1200">慢</option>
-          <option value="800" selected>中</option>
-          <option value="400">快</option>
-        </select>
-      </div>
-    </header>
-    <div id="map"></div>
-    <div class="panel">
-      <div class="controls">
-        <div class="slider-row">
-          <span>月份</span>
-          <input id="monthSlider" type="range" min="0" max="241" step="1" value="0" />
-          <span id="monthLabel" class="month-label">200501</span>
-        </div>
-      </div>
-      <div class="ranking">
-        <h3>當月運量排名</h3>
-        <ol id="rankingList" class="ranking-list"></ol>
-      </div>
+  <header>
+    <h1>高雄台鐵 14站</h1>
+    <div class="ctl">
+      <button id="playBtn" class="btn">播放</button>
+      <select id="speedSel" class="btn">
+        <option value="1200">慢</option>
+        <option value="800" selected>中</option>
+        <option value="400">快</option>
+      </select>
+      <button id="rankBtn" class="btn">排名</button>
+    </div>
+  </header>
+  <div id="map"></div>
+
+  <div class="bottom-controls">
+    <div class="slider">
+      <span>月份</span>
+      <input id="monthSlider" type="range" min="0" max="241" step="1" value="0" />
+      <span id="monthLabel" class="month-label">200501</span>
+    </div>
+  </div>
+
+  <!-- Hidden bottom sheet -->
+  <div id="sheet" class="sheet" aria-hidden="true">
+    <div class="handle">
+      <div class="bar"></div>
+      <div class="title">當月運量排名</div>
+    </div>
+    <div class="ranking">
+      <ol id="rankingList" class="ranking-list"></ol>
     </div>
   </div>
 </div>
@@ -99,7 +108,7 @@
   group.addTo(map);
   if (markers.length) map.fitBounds(group.getBounds().pad(0.2)); else map.setView([22.63,120.30],11);
 
-  // Build polyline in desired order (no text labels at ends)
+  // Polyline in desired order
   function normalizeName(s) { return (s||'').replace(/\u3000/g,' ').replace(/\s+/g,'').trim(); }
   const byName = Object.fromEntries(STATIONS.map(s => [normalizeName(s.station), s]));
   const latlngs = [];
@@ -123,6 +132,8 @@
   const rankingList = document.getElementById('rankingList');
   const playBtn = document.getElementById('playBtn');
   const speedSel = document.getElementById('speedSel');
+  const sheet = document.getElementById('sheet');
+  const rankBtn = document.getElementById('rankBtn');
   let playing=false, timer=null;
 
   function prevIdx(i) { return i>0 ? i-1 : 0; }
@@ -149,6 +160,7 @@
       m.bindPopup(tip);
     });
 
+    // Prepare ranking list but only show when sheet is open
     const rows = STATIONS.map(s => ({ station: s.station, value: s.series[ym] || 0 })).sort((a,b)=>b.value-a.value);
     rankingList.innerHTML = rows.map((r,i)=>`<li><span>${i+1}. ${r.station}</span><span class="value">${fmt(r.value)}</span></li>`).join('');
   }
@@ -160,6 +172,9 @@
   playBtn.addEventListener('click', ()=>{ playing?pause():play(); });
   speedSel.addEventListener('change', ()=>{ if (playing) { pause(); play(); } });
   monthSlider.addEventListener('input', e => { pause(); setMonthIndex(parseInt(e.target.value,10)); });
+
+  // Toggle ranking bottom sheet
+  rankBtn.addEventListener('click', () => { sheet.classList.toggle('open'); });
 
   setMonthIndex(0);
 </script>
